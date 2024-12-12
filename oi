@@ -1,1 +1,252 @@
-oi
+# Importar bibliotecas
+
+```
+!pip install plottable
+import re
+import pandas as pd
+import matplotlib.pyplot as plt
+from collections import Counter
+from plottable import Table, ColumnDefinition
+from plottable.formatters import decimal_to_percent
+from plottable.plots import bar, percentile_bars, percentile_stars, progress_donut
+from pandas.plotting import table
+```
+
+# Função principal para processar o arquivo de chat
+
+```
+def processar_chat(caminho_arquivo, usuarios_nomes):
+    # Dicionários e listas para armazenar os resultados
+    contagem_mensagens = {}  # Contagem de mensagens por usuário
+    contagem_marcacoes = {}  # Contagem de menções por número de telefone
+    marcacoes_por_usuario = {}  # Detalhamento das menções por usuário
+    palavras_por_usuario = {}  # Palavras utilizadas por usuário
+    datas_mensagens = []  # Datas das mensagens
+    palavras_remover = {'anexado', 'arquivo', 'mídia', 'oculta'}  # Palavras irrelevantes para análise
+    padrao = r'(\d{2}/\d{2}/\d{4}) (\d{2}:\d{2}) - ([^:]+): (.+)'  # Regex para identificar o formato das mensagens
+
+    # Abrindo o arquivo para leitura
+    with open(caminho_arquivo, 'r', encoding='utf-8') as arquivo:
+        for linha in arquivo:
+            # Verificando se a linha corresponde ao padrão esperado
+            match = re.search(padrao, linha)
+            if match:
+                data, _, usuario, mensagem = match.groups()
+
+                # Incrementando a contagem de mensagens do usuário
+                contagem_mensagens[usuario] = contagem_mensagens.get(usuario, 0) + 1
+                datas_mensagens.append(data)
+
+                # Buscando marcações (@número) na mensagem
+                marcacoes = re.findall(r'@(\d{12})', mensagem)
+                for marcado in marcacoes:
+                    if marcado != usuario:  # Evita contar o próprio usuário
+                        contagem_marcacoes[marcado] = contagem_marcacoes.get(marcado, 0) + 1
+                        if usuario not in marcacoes_por_usuario:
+                            marcacoes_por_usuario[usuario] = {}
+                        # Contabilizando a marcação por usuário
+                        marcacoes_por_usuario[usuario][marcado] = marcacoes_por_usuario[usuario].get(marcado, 0) + 1
+
+                # Processando palavras na mensagem, ignorando palavras irrelevantes
+                palavras = [p for p in re.findall(r'\b\w+\b', mensagem.lower()) if p not in palavras_remover]
+                palavras_por_usuario.setdefault(usuario, []).extend(palavras)
+
+    # Determinando a palavra mais frequente por usuário
+    palavras_mais_frequentes_usuario = {
+        usuario: Counter(palavras).most_common(1)[0][0]
+        for usuario, palavras in palavras_por_usuario.items()
+    }
+
+    # Calculando a frequência de palavras gerais
+    palavras_freq = Counter([p for sublist in palavras_por_usuario.values() for p in sublist])
+    palavras_freq_filtradas = {p: c for p, c in palavras_freq.items() if len(p) > 4 and c > 1}
+
+    # Criando DataFrames para as análises
+    df_palavras_freq = pd.DataFrame.from_dict(palavras_freq_filtradas, orient='index', columns=['Frequência']).sort_values('Frequência', ascending=False).head(10)
+    df_marcacoes = pd.DataFrame.from_dict(contagem_marcacoes, orient='index', columns=['Número de Marcações']).sort_values('Número de Marcações', ascending=False)
+    df_palavras_usuario = pd.DataFrame(list(palavras_mais_frequentes_usuario.items()), columns=['Usuário', 'Palavra Mais Frequente'])
+
+    # Calculando a média de mensagens por dia
+    total_dias = len(set(datas_mensagens))
+    media_mensagens_por_dia = len(datas_mensagens) / total_dias if total_dias > 0 else 0
+
+    # Retornando os resultados em um dicionário
+    return {
+        'contagem_mensagens': contagem_mensagens,
+        'palavras_freq': df_palavras_freq,
+        'marcacoes': df_marcacoes,
+        'media_mensagens_dia': media_mensagens_por_dia,
+        'palavras_usuario': df_palavras_usuario,
+        'marcacoes_por_usuario': marcacoes_por_usuario
+    }
+```
+# Função para substituir números de telefone por nomes reais
+```
+def substituir_numeros_por_nomes(marcacoes_por_usuario, usuarios_nomes):
+    marcacoes_com_nomes = {}
+    for usuario, marcados_dict in marcacoes_por_usuario.items():
+        # Substitui o número do usuário pelo nome, se disponível
+        nome_usuario = usuarios_nomes.get(usuario, usuario)
+        marcacoes_com_nomes[nome_usuario] = {
+            usuarios_nomes.get(marcado, marcado): vezes
+            for marcado, vezes in marcados_dict.items()
+        }
+    return marcacoes_com_nomes
+
+# Caminho do arquivo contendo o chat exportado
+caminho_arquivo = 'Mulas.txt'
+
+# Dicionário para mapear números de telefone para nomes
+usuarios_nomes = {
+    "numero de telefone"   : " Nome da pessoal",
+    "numero de telefone"   : " Nome da pessoal",
+    "numero de telefone"   : " Nome da pessoal",
+    "numero de telefone"   : " Nome da pessoal",
+    "numero de telefone"   : " Nome da pessoal",
+    "numero de telefone"   : " Nome da pessoal",
+}
+```
+# Processando o arquivo e gerando análises
+```
+resultados = processar_chat(caminho_arquivo, usuarios_nomes)
+
+# Substituindo números de telefone por nomes nos resultados de marcações
+marcacoes_com_nomes = substituir_numeros_por_nomes(resultados['marcacoes_por_usuario'], usuarios_nomes)
+
+# Criando DataFrame com a contagem de mensagens por usuário
+resultado_contagem = pd.DataFrame(list(resultados['contagem_mensagens'].items()), columns=['Usuário', 'Número de Mensagens'])
+
+# Calculando a média de mensagens por dia
+media_mensagens_dia = resultados['media_mensagens_dia']
+
+# Total de mensagens no chat
+total_de_mensagens = resultado_contagem['Número de Mensagens'].sum()
+
+tabela1 = pd.DataFrame.from_dict(marcacoes_com_nomes, orient='index').fillna(0).reset_index()
+
+T_marcacoes = substituir_numeros_por_nomes(resultados['marcacoes'], usuarios_nomes)
+
+tabela2 =  pd.DataFrame.from_dict(T_marcacoes).fillna(0).reset_index()
+
+dados_tabela = resultados['palavras_usuario']
+
+```
+# Graficos
+```
+#Aqui está o significado de cada argumento dentro da função ax.text():
+    # ha='left': ha significa "horizontal alignment" (alinhamento horizontal). left alinha o texto à esquerda. Portanto, o início do texto será alinhado à posição x especificada.
+    # Outros valores possíveis para ha incluem:'center' para centralizar o texto na posição x.'right' para alinhar o texto à direita.
+    # va='bottom': va significa "vertical alignment" (alinhamento vertical).bottom alinha o texto ao fundo da posição y especificada. Isso significa que a base do texto ficará na coordenada y informada.
+    # Outros valores possíveis para va incluem:'center' para centralizar o texto na posição y.'top' para alinhar o texto ao topo da posição y.
+    # fontsize=15:Define o tamanho da fonte do texto. 15 é o tamanho da fonte, mas você pode ajustar esse número para aumentar ou diminuir o tamanho do texto.
+    # fontweight='bold':Define o peso da fonte, ou seja, se o texto será em negrito ou não. bold torna o texto em negrito. 
+    # Outros valores possíveis incluem:'normal' para texto regular. 'light' para uma fonte mais fina. 'semibold' para um negrito intermediário. 
+    # color='white':Define a cor do texto. white é a cor branca, mas você pode usar outras cores como 'red', 'blue', 'black', ou 
+    # até códigos hexadecimais como '#FFFFFF' (branco) ou '#FF5733' (um tom de laranja).
+    # bbox=dict(facecolor='skyblue', edgecolor='black', boxstyle='round,pad=0.5'): bbox significa "bounding box" (caixa delimitadora), que é uma caixa de fundo ao redor do texto.
+    # facecolor='skyblue': Define a cor de fundo da caixa como azul claro. 
+    # edgecolor='black': Define a cor da borda da caixa como preta.
+    # boxstyle='round,pad=0.5': Define o estilo da caixa. 'round': Faz com que os cantos da caixa sejam arredondados.
+    # pad=0.5: Define o espaçamento entre o texto e as bordas da caixa. O valor 0.5 significa que há um espaço de 0.5 unidades ao redor do texto dentro da caixa.
+
+# Criando uma figura 1 e eixos com fundo transparente
+fig, ax = plt.subplots(figsize=(5, 1), facecolor='none')  # Define o fundo da figura como transparente
+# Adicionando o texto "Total de Mensagens"
+ax.text(0.5, 0.5, f'Total de Mensagens: {total_de_mensagens}', 
+        ha='center', va='center', fontsize=10, fontweight='semibold', color='black',
+        bbox=dict(facecolor='skyblue', edgecolor='black', boxstyle='round,pad=0.5'))  
+# Ocultando os eixos
+ax.axis('off')
+# Mostrando a figura
+plt.show()
+
+# Criando uma figura 2 e eixos com fundo transparente
+fig, ax = plt.subplots(figsize=(5, 1), facecolor='none')  # Define o fundo da figura como transparente
+# Adicionando o texto "Média de Mensagens por Dia"
+ax.text(0.5, 0.5, f'Média de Mensagens por Dia: {media_mensagens_dia:.2f}', 
+        ha='center', va='center', fontsize=10, fontweight='semibold', color='black',
+        bbox=dict(facecolor='lightgreen', edgecolor='black', boxstyle='round,pad=0.5')) 
+# Ocultando os eixos
+ax.axis('off')
+# Mostrando a figura
+plt.show()
+
+# Gráfico de barras 01
+fig, ax1 = plt.subplots(figsize=(10, 6), facecolor='none')
+
+# Contagem de mensagens por usuário
+ax1.bar(resultado_contagem['Usuário'], resultado_contagem['Número de Mensagens'], color='lightcoral')
+ax1.set_title('Número de Mensagens por Usuário', fontsize=15)  # Título
+ax1.set_xlabel('Usuário', fontsize=12)  # Eixo X: Título e tamanho da fonte
+ax1.set_ylabel('Número de Mensagens', fontsize=12)  # Eixo Y: Título e tamanho da fonte
+ax1.set_xticks(range(len(resultado_contagem['Usuário'])))
+ax1.set_xticklabels(resultado_contagem['Usuário'], rotation=45, ha='right')  # Rótulos inclinados
+# Ajustando o layout para não sobrepor elementos
+plt.tight_layout()
+plt.show()
+
+# Gráfico de barras 02
+fig, ax2 = plt.subplots(figsize=(10, 6), facecolor='none')
+
+# Gráfico de palavras mais frequentes
+indices_palavras = range(len(resultados['palavras_freq'].index))
+ax2.bar(indices_palavras, resultados['palavras_freq']['Frequência'], color='lightseagreen')
+ax2.set_title('10 Palavras Mais Frequentes', fontsize=15)
+ax2.set_xlabel('Palavra', fontsize=12)
+ax2.set_ylabel('Frequência', fontsize=12)
+ax2.set_xticks(indices_palavras)
+ax2.set_xticklabels(resultados['palavras_freq'].index, rotation=45, ha='right')  # Rótulos ajustados
+# Ajustando o layout
+plt.tight_layout()
+plt.show()
+
+# Criando a figura e o eixo para a tabela
+fig, ax = plt.subplots(figsize=(10, 6), facecolor='none')
+# Criando a tabela 1
+tab = ax.table(
+    cellText=tabela1.values,  # Valores da tabela
+    colLabels=tabela1.columns,  # Cabeçalhos da tabela
+    loc='center',  # Localização
+    cellLoc='center',  # Alinhamento das células
+    colColours=["skyblue"] * len(tabela1.columns) ) # Cor das colunas
+# Configurando título e ocultando eixos
+ax.set_title('Tabela de Marcações', fontsize=15)
+ax.axis('off')  # Ocultar os eixos
+# Ajustando o layout
+plt.tight_layout()
+# Mostrando a figura
+plt.show()
+
+# Criando a figura e o eixo para a tabela
+fig, ax = plt.subplots(figsize=(10, 6), facecolor='none')
+# Criando a tabela 2
+tab = ax.table(
+    cellText=tabela2.values,  # Valores da tabela
+    colLabels=tabela2.columns,  # Cabeçalhos da tabela
+    loc='center',  # Localização
+    cellLoc='center',  # Alinhamento das células
+    colColours=["skyblue"] * len(tabela2.columns) ) # Cor das colunas
+# Configurando título e ocultando eixos
+ax.set_title('Tabela de Marcações', fontsize=15)
+ax.axis('off')  # Ocultar os eixos
+# Ajustando o layout
+plt.tight_layout()
+# Mostrando a figura
+plt.show()
+
+fig, ax = plt.subplots(figsize=(10, 6), facecolor='none') # Configuração de tamanho da figura
+# Criação da tabela no subplot ax1
+tab = ax.table(
+    cellText=dados_tabela.values,
+    colLabels=dados_tabela.columns,
+    loc='center',
+    cellLoc='center',
+    colColours=["skyblue"] * len(dados_tabela.columns))
+# Configuração do título e desativação dos eixos
+ax.set_title('Palavra Mais Frequente por Usuário', fontsize=15)
+ax.axis('off')  # Oculta os eixos para exibição somente da tabela
+# Ajustando o layout
+plt.tight_layout()  
+# Mostrando a figura
+plt.show()
+```
