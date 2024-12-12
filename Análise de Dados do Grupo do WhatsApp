@@ -1,6 +1,5 @@
 # Importar bibliotecas
 
-```
 !pip install plottable
 import re
 import pandas as pd
@@ -10,11 +9,9 @@ from plottable import Table, ColumnDefinition
 from plottable.formatters import decimal_to_percent
 from plottable.plots import bar, percentile_bars, percentile_stars, progress_donut
 from pandas.plotting import table
-```
 
 # Função principal para processar o arquivo de chat
 
-```
 def processar_chat(caminho_arquivo, usuarios_nomes):
     # Dicionários e listas para armazenar os resultados
     contagem_mensagens = {}  # Contagem de mensagens por usuário
@@ -79,9 +76,9 @@ def processar_chat(caminho_arquivo, usuarios_nomes):
         'palavras_usuario': df_palavras_usuario,
         'marcacoes_por_usuario': marcacoes_por_usuario
     }
-```
+
 # Função para substituir números de telefone por nomes reais
-```
+
 def substituir_numeros_por_nomes(marcacoes_por_usuario, usuarios_nomes):
     marcacoes_com_nomes = {}
     for usuario, marcados_dict in marcacoes_por_usuario.items():
@@ -105,9 +102,9 @@ usuarios_nomes = {
     "numero de telefone"   : " Nome da pessoal",
     "numero de telefone"   : " Nome da pessoal",
 }
-```
+
 # Processando o arquivo e gerando análises
-```
+
 resultados = processar_chat(caminho_arquivo, usuarios_nomes)
 
 # Substituindo números de telefone por nomes nos resultados de marcações
@@ -130,9 +127,8 @@ tabela2 =  pd.DataFrame.from_dict(T_marcacoes).fillna(0).reset_index()
 
 dados_tabela = resultados['palavras_usuario']
 
-```
 # Graficos
-```
+
 #Aqui está o significado de cada argumento dentro da função ax.text():
     # ha='left': ha significa "horizontal alignment" (alinhamento horizontal). left alinha o texto à esquerda. Portanto, o início do texto será alinhado à posição x especificada.
     # Outros valores possíveis para ha incluem:'center' para centralizar o texto na posição x.'right' para alinhar o texto à direita.
